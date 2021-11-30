@@ -4,6 +4,8 @@ cat("\014")
 set.seed(125)
 setwd("C:/Users/eriks/OneDrive - Smart City Real Estate/Personal/Baruch/S5/STA 9891/Project")
 
+library(doMC)
+library(parallel)
 library(glmnet)
 library(tidyverse)
 library(randomForest)
@@ -12,6 +14,8 @@ library(readr)
 library(ggplot2)
 library(pROC)
 
+num_cores = "your number of cpu cores"
+registerDoMC(cores = num_cores)
 ############################################################################
 #                Read In & Prepare the Dataset for Analysis                #
 ############################################################################
@@ -82,19 +86,6 @@ run.times <- data.frame(Loop = seq(1,50),
                         Time = rep(0,50))
 
 
-
-# For one of the samples plot the cross validation curves
-# Initialize the plot objects and we'll store the plots we get when i == 5
-
-# elnet.cv = 0
-# lasso.cv = 0
-# ridge.cv = 0
-
-# elnet.cv.plot = plot(elnet.cv)
-# lasso.cv.plot = plot(lasso.cv)
-# ridge.cv.plot = plot(ridge.cv)
-
-
 # alpha parameters
 elnet.alpha = 0.5
 lasso.alpha = 1
@@ -105,35 +96,16 @@ ridge.alpha = 0
 sim.start <- proc.time()
 for(i in 1:runs){
   cat("Cross Validation Number",i,"\n")
+  
   loop.start = proc.time()
   cat("Generating Sample", i, "of 50", "\n")
+  
   ##### Sample & Create Train/Test Indices #####
   n_obs         <- seq(1:n)
   sample.size   <- floor(.90*n)
   train.indices <- sample(seq_len(n), size=sample.size)
   test.indices  <- !(n_obs%in%train.indices)
-  #####
-  # No Longer Needed since this was handled upstairs, outside the loop.
-  # cat("Creating the Model Matrix", i, "of 50.", "\n")
-  # data.Y  = as.factor(data[,86])
-  # 
-  # data.X  = data[,-86]
-  # data.X  = lapply(data.X, factor)
-  # data.X  = model.matrix(~.-1, data = data.X)
   
- 
-  # After creating the model matrix, some categories only have 1 level
-  # Model.Matrix needs at least 2 levels to work properly
-  # So we automatically set the levels 
-  # writeLines("Setting Individual Levels")
-  # for(j in 1:ncol(data.X)){
-  #   if(nlevels(data.X[,j])==1){
-  #     levels(data.X[,j])=c(0,1)
-  #   }
-  # }
-  
-  # Now that the levels are at least 2 for each category
-  # We can partition into training and testing
   ##### Partition Training Data #####
   writeLines("Partitioning Training Data")
   X.train = data.X[train.indices,]
@@ -148,9 +120,10 @@ for(i in 1:runs){
   
   # Elastic Net
   elnet.start <- proc.time()
-  elnet.cv    <- cv.glmnet(X.train, Y.train, 
-                           family = "binomial",
-                           alpha = elnet.alpha, 
+  elnet.cv    <- cv.glmnet(X.train, Y.train,
+                           parallel     = TRUE, 
+                           family       = "binomial",
+                           alpha        = elnet.alpha, 
                            type.measure = "auc")
   elnet.end   <- proc.time()
   elnet.time  <- elnet.end[3]-elnet.start[3]
@@ -161,8 +134,9 @@ for(i in 1:runs){
   cat("Beginning Lasso Cross Validation Number", i, "of 50.", "\n" )
   lasso.start <- proc.time()
   lasso.cv    <- cv.glmnet(X.train, Y.train, 
-                           family = "binomial",
-                           alpha = lasso.alpha, 
+                           parallel     = TRUE,
+                           family       = "binomial",
+                           alpha        = lasso.alpha, 
                            type.measure = "auc")
   lasso.end   <- proc.time()
   lasso.time  <- lasso.end[3]-lasso.start[3]
@@ -173,8 +147,9 @@ for(i in 1:runs){
   cat("Beginning Ridge Cross Validation Number", i, "of 50.", "\n" )
   ridge.start <- proc.time()
   ridge.cv    <- cv.glmnet(X.train, Y.train, 
-                           family = "binomial",
-                           alpha = ridge.alpha,
+                           parallel     = TRUE,
+                           family       = "binomial",
+                           alpha        = ridge.alpha,
                            type.measure = "auc")
   ridge.end   <- proc.time()
   ridge.time  <- ridge.end[3]-ridge.start[3]
@@ -192,32 +167,29 @@ for(i in 1:runs){
     plot(ridge.cv)
     title(main="Ridge Cross Validation Curve",line = 3)
   }
-  ###### Pull out & Store Model Parameters #####
-  elnet.lambda   <- elnet.cv$lambda.min
-  lasso.lambda   <- lasso.cv$lambda.min
-  ridge.lambda   <- ridge.cv$lambda.min
+ 
   
-  
-  lambdas.df$ElNet[i] <- elnet.lambda
-  lambdas.df$Lasso[i] <- lasso.lambda
-  lambdas.df$Ridge[i] <- ridge.lambda
+  lambdas.df$ElNet[i] <- elnet.cv$lambda.min
+  lambdas.df$Lasso[i] <- lasso.cv$lambda.min
+  lambdas.df$Ridge[i] <- ridge.cv$lambda.min
   
   
   # Pull out the parameters
   cat("Extracting the Elastic Net Beta Coefficients for pass", i, "\n")
   elnet.index   <- which.max(elnet.cv$cvm)
   elnet.beta    <- as.vector(elnet.cv$glmnet.fit$beta[, elnet.index])
-  elnet.beta0   <- elnet.cv$glmnet.fit$a0
+  elnet.beta0   <- elnet.cv$glmnet.fit$a0[elnet.index]
   
   cat("Extracting the Lasso Beta Coefficients for pass", i, "\n")
   lasso.index   <- which.max(lasso.cv$cvm)
   lasso.beta    <- as.vector(lasso.cv$glmnet.fit$beta[, lasso.index])
-  lasso.beta0   <- lasso.cv$glmnet.fit$a0
+  lasso.beta0   <- lasso.cv$glmnet.fit$a0[lasso.index]
   
   cat("Extracting the Ridge Beta Coefficients for pass", i, "\n")
   ridge.index   <- which.max(ridge.cv$cvm)
   ridge.beta    <- as.vector(ridge.cv$glmnet.fit$beta[, ridge.index])
-  ridge.beta0   <- ridge.cv$glmnet.fit$a0
+  ridge.beta0   <- ridge.cv$glmnet.fit$a0[ridge.index]
+  
   ##### Calculate AUC #####
   cat("Calculating AUC for run", i, "of 50", "\n")
   writeLines("Calculating Distances From the Hyper Plane")
@@ -357,15 +329,15 @@ full.times <- c(rep(0,4))
 
 elnet.start.full <- proc.time()
 elnet.full.cv    <- cv.glmnet(data.X, data.Y, 
-                              family = "binomial",
-                              alpha = elnet.alpha,
+                              parallel     = TRUE
+                              family       = "binomial",
+                              alpha        = elnet.alpha,
                               type.measure = "auc")
 
 elnet.full.lambda <- elnet.full.cv$lambda.min
 elnet.model <- glmnet(data.X, data.Y, 
                       family="binomial",
-                      alpha = elnet.alpha,
-                      lambda = elnet.full.lambda)
+                      alpha = elnet.alpha)
 elnet.end.full <- proc.time()
 elnet.full.time <- elnet.end.full[3] - elnet.start.full[3]
 full.times[1] <- elnet.full.time
@@ -376,14 +348,14 @@ full.times[1] <- elnet.full.time
 
 lasso.start.full  <- proc.time()
 lasso.full.cv     <- cv.glmnet(data.X, data.Y, 
-                               family = "binomial",
-                               alpha = lasso.alpha,
+                               parallel     = TRUE,
+                               family       = "binomial",
+                               alpha        = lasso.alpha,
                                type.measure = "auc")
 lasso.full.lambda <- lasso.full.cv$lambda.min
 lasso.model       <- glmnet(data.X, data.Y, 
-                            family="binomial",
-                            alpha = lasso.alpha,
-                            lambda = lasso.full.lambda)
+                            family  = "binomial",
+                            alpha   = lasso.alpha)
 lasso.end.full    <- proc.time()
 lasso.full.time   <- lasso.end.full[3] - lasso.start.full[3]
 full.times[2]     <- lasso.full.time
@@ -392,14 +364,14 @@ full.times[2]     <- lasso.full.time
 
 ridge.start.full  <- proc.time()
 ridge.full.cv     <- cv.glmnet(data.X, data.Y, 
-                               family = "binomial",
-                               alpha = ridge.alpha,
+                               parallel     = TRUE,
+                               family       = "binomial",
+                               alpha        = ridge.alpha,
                                type.measure = "auc")
 ridge.full.lambda <- ridge.full.cv$lambda.min
 ridge.model       <- glmnet(data.X, data.Y, 
                             family="binomial",
-                            alpha = ridge.alpha,
-                            lambda = ridge.full.lambda)
+                            alpha = ridge.alpha)
 ridge.end.full    <- proc.time()
 ridge.full.time   <- ridge.end.full[3] - ridge.start.full[3]
 full.times[3]     <- ridge.full.time
@@ -422,9 +394,9 @@ auc.times.df
 
 s = apply(data.X, 2, sd) # get the standard deviation of the variables
 
-elnet.full.beta <- as.vector(elnet.full.cv$glmnet.fit$beta[,which.max(elnet.full.cv$cvm)])
-lasso.full.beta <- as.vector(lasso.full.cv$glmnet.fit$beta[,which.max(lasso.full.cv$cvm)])
-ridge.full.beta <- as.vector(ridge.full.cv$glmnet.fit$beta[,which.max(ridge.full.cv$cvm)])
+elnet.full.beta <- as.vector(elnet.model$beta[,which.max(elnet.full.cv$cvm)])
+lasso.full.beta <- as.vector(lasso.model$beta[,which.max(lasso.full.cv$cvm)])
+ridge.full.beta <- as.vector(ridge.model$beta[,which.max(ridge.full.cv$cvm)])
 
 elnet.coefs       <- elnet.full.beta*s  # multiply coefficients by sd(Variable) to standardize
 lasso.coefs       <- lasso.full.beta*s
