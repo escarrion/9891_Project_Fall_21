@@ -329,7 +329,7 @@ full.times <- c(rep(0,4))
 
 elnet.start.full <- proc.time()
 elnet.full.cv    <- cv.glmnet(data.X, data.Y, 
-                              parallel     = TRUE
+                              parallel     = TRUE,
                               family       = "binomial",
                               alpha        = elnet.alpha,
                               type.measure = "auc")
