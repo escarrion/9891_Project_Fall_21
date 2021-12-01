@@ -438,7 +438,7 @@ ridgePlot = variable.importance %>% ggplot(aes(x = Number, y = Ridge)) +
   labs(title = "Standardized Ridge Coefficients", x = "Variable", y = "Coefficient") +
   theme_bw()
 
-rfPlot = variable.importance %>% ggplot(aes(x = Number, y = IncNodePurity)) +
+rfPlot = variable.importance %>% ggplot(aes(x = Number, y = MeanDecreaseGini)) +
   geom_col() +
   labs(title = "Random Forrest Variable Importance", x = "Variable", y = "Coefficient") +
   theme_bw() 
