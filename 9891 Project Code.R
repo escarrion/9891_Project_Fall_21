@@ -4,6 +4,8 @@ cat("\014")
 set.seed(125)
 setwd("C:/Users/eriks/OneDrive - Smart City Real Estate/Personal/Baruch/S5/STA 9891/Project")
 
+library(doMC)
+library(parallel)
 library(glmnet)
 library(tidyverse)
 library(randomForest)
@@ -12,6 +14,8 @@ library(readr)
 library(ggplot2)
 library(pROC)
 
+num_cores = "your number of cpu cores"
+registerDoMC(cores = num_cores)
 ############################################################################
 #                Read In & Prepare the Dataset for Analysis                #
 ############################################################################
@@ -82,19 +86,6 @@ run.times <- data.frame(Loop = seq(1,50),
                         Time = rep(0,50))
 
 
-
-# For one of the samples plot the cross validation curves
-# Initialize the plot objects and we'll store the plots we get when i == 5
-
-# elnet.cv = 0
-# lasso.cv = 0
-# ridge.cv = 0
-
-# elnet.cv.plot = plot(elnet.cv)
-# lasso.cv.plot = plot(lasso.cv)
-# ridge.cv.plot = plot(ridge.cv)
-
-
 # alpha parameters
 elnet.alpha = 0.5
 lasso.alpha = 1
@@ -105,35 +96,16 @@ ridge.alpha = 0
 sim.start <- proc.time()
 for(i in 1:runs){
   cat("Cross Validation Number",i,"\n")
+  
   loop.start = proc.time()
   cat("Generating Sample", i, "of 50", "\n")
+  
   ##### Sample & Create Train/Test Indices #####
   n_obs         <- seq(1:n)
   sample.size   <- floor(.90*n)
   train.indices <- sample(seq_len(n), size=sample.size)
   test.indices  <- !(n_obs%in%train.indices)
-  #####
-  # No Longer Needed since this was handled upstairs, outside the loop.
-  # cat("Creating the Model Matrix", i, "of 50.", "\n")
-  # data.Y  = as.factor(data[,86])
-  # 
-  # data.X  = data[,-86]
-  # data.X  = lapply(data.X, factor)
-  # data.X  = model.matrix(~.-1, data = data.X)
   
- 
-  # After creating the model matrix, some categories only have 1 level
-  # Model.Matrix needs at least 2 levels to work properly
-  # So we automatically set the levels 
-  # writeLines("Setting Individual Levels")
-  # for(j in 1:ncol(data.X)){
-  #   if(nlevels(data.X[,j])==1){
-  #     levels(data.X[,j])=c(0,1)
-  #   }
-  # }
-  
-  # Now that the levels are at least 2 for each category
-  # We can partition into training and testing
   ##### Partition Training Data #####
   writeLines("Partitioning Training Data")
   X.train = data.X[train.indices,]
@@ -148,9 +120,10 @@ for(i in 1:runs){
   
   # Elastic Net
   elnet.start <- proc.time()
-  elnet.cv    <- cv.glmnet(X.train, Y.train, 
-                           family = "binomial",
-                           alpha = elnet.alpha, 
+  elnet.cv    <- cv.glmnet(X.train, Y.train,
+                           parallel     = TRUE, 
+                           family       = "binomial",
+                           alpha        = elnet.alpha, 
                            type.measure = "auc")
   elnet.end   <- proc.time()
   elnet.time  <- elnet.end[3]-elnet.start[3]
@@ -161,8 +134,9 @@ for(i in 1:runs){
   cat("Beginning Lasso Cross Validation Number", i, "of 50.", "\n" )
   lasso.start <- proc.time()
   lasso.cv    <- cv.glmnet(X.train, Y.train, 
-                           family = "binomial",
-                           alpha = lasso.alpha, 
+                           parallel     = TRUE,
+                           family       = "binomial",
+                           alpha        = lasso.alpha, 
                            type.measure = "auc")
   lasso.end   <- proc.time()
   lasso.time  <- lasso.end[3]-lasso.start[3]
@@ -173,8 +147,9 @@ for(i in 1:runs){
   cat("Beginning Ridge Cross Validation Number", i, "of 50.", "\n" )
   ridge.start <- proc.time()
   ridge.cv    <- cv.glmnet(X.train, Y.train, 
-                           family = "binomial",
-                           alpha = ridge.alpha,
+                           parallel     = TRUE,
+                           family       = "binomial",
+                           alpha        = ridge.alpha,
                            type.measure = "auc")
   ridge.end   <- proc.time()
   ridge.time  <- ridge.end[3]-ridge.start[3]
@@ -192,32 +167,29 @@ for(i in 1:runs){
     plot(ridge.cv)
     title(main="Ridge Cross Validation Curve",line = 3)
   }
-  ###### Pull out & Store Model Parameters #####
-  elnet.lambda   <- elnet.cv$lambda.min
-  lasso.lambda   <- lasso.cv$lambda.min
-  ridge.lambda   <- ridge.cv$lambda.min
+ 
   
-  
-  lambdas.df$ElNet[i] <- elnet.lambda
-  lambdas.df$Lasso[i] <- lasso.lambda
-  lambdas.df$Ridge[i] <- ridge.lambda
+  lambdas.df$ElNet[i] <- elnet.cv$lambda.min
+  lambdas.df$Lasso[i] <- lasso.cv$lambda.min
+  lambdas.df$Ridge[i] <- ridge.cv$lambda.min
   
   
   # Pull out the parameters
   cat("Extracting the Elastic Net Beta Coefficients for pass", i, "\n")
   elnet.index   <- which.max(elnet.cv$cvm)
   elnet.beta    <- as.vector(elnet.cv$glmnet.fit$beta[, elnet.index])
-  elnet.beta0   <- elnet.cv$glmnet.fit$a0
+  elnet.beta0   <- elnet.cv$glmnet.fit$a0[elnet.index]
   
   cat("Extracting the Lasso Beta Coefficients for pass", i, "\n")
   lasso.index   <- which.max(lasso.cv$cvm)
   lasso.beta    <- as.vector(lasso.cv$glmnet.fit$beta[, lasso.index])
-  lasso.beta0   <- lasso.cv$glmnet.fit$a0
+  lasso.beta0   <- lasso.cv$glmnet.fit$a0[lasso.index]
   
   cat("Extracting the Ridge Beta Coefficients for pass", i, "\n")
   ridge.index   <- which.max(ridge.cv$cvm)
   ridge.beta    <- as.vector(ridge.cv$glmnet.fit$beta[, ridge.index])
-  ridge.beta0   <- ridge.cv$glmnet.fit$a0
+  ridge.beta0   <- ridge.cv$glmnet.fit$a0[ridge.index]
+  
   ##### Calculate AUC #####
   cat("Calculating AUC for run", i, "of 50", "\n")
   writeLines("Calculating Distances From the Hyper Plane")
@@ -290,51 +262,30 @@ total.sim.time
 ###             AUC Box-Plots              ###
 ###############################################
 
-sample.train <- rep("Train", 50)
-sample.test  <- rep("Test", 50)
+sample.train <- rep("Train", 200)
+sample.test  <- rep("Test", 200)
+elnet.label  <- rep("Elastic Net", 50)
+lasso.label  <- rep("Lasso", 50)
+ridge.label  <- rep("Ridge", 50)
+rf.label     <- rep("Random Forest", 50)
 
-# Convert to Long Format for ease of use with ggplot
-auc.train.df <- data.frame(Sample = sample.train,
-                           ElNet = auc.df$ElNet.train,
-                           Lasso = auc.df$Lasso.train,
-                           Ridge = auc.df$Ridge.train, 
-                           RF    = auc.df$RF.train)
-auc.test.df <- data.frame(Sample = sample.test, 
-                          ElNet  = auc.df$ElNet.test,
-                          Lasso  = auc.df$Lasso.test,
-                          Ridge  = auc.df$Ridge.test,
-                          RF     = auc.df$RF.test)
-long.auc.df <- rbind(auc.train.df, auc.test.df)
+method.labels = c(elnet.label, lasso.label, ridge.label, rf.label)
 
-##### Create The Box Plots #####
-elnet.auc.box <- long.auc.df %>% ggplot(aes(x = Sample, y = ElNet)) +
-  geom_boxplot() +
-  labs(title = "Elastic Net AUC Boxplots",
-       y = "AUC") +
-  theme_bw()
+train_auc = c(auc.df$ElNet.train, auc.df$Lasso.train, auc.df$Ridge.train, auc.df$RF.train)
+test_auc  = c(auc.df$ElNet.test, auc.df$Lasso.test,auc.df$Ridge.test,auc.df$RF.test)
+total_auc = c(train_auc, test_auc)
 
-lasso.auc.box <- long.auc.df %>% ggplot(aes(x = Sample, y = Lasso)) +
-  geom_boxplot() +
-  labs(title = "Lasso AUC Boxplots",
-       y = "AUC") +
-  theme_bw()
+train.auc.df = data.frame(Sample = sample.train, 
+                          Model = method.labels, 
+                          AUC = train_auc)
+test.auc.df = data.frame(Sample = sample.test, 
+                         Model = method.labels, 
+                         AUC = test_auc)
+long.df.auc = rbind(train.auc.df, test.auc.df)
 
-ridge.auc.box <- long.auc.df %>% ggplot(aes(x = Sample, y = Ridge)) +
-  geom_boxplot() +
-  labs(title = "Ridge AUC Boxplots",
-       y = "AUC") +
-  theme_bw()
+# Create the boxplot
+long.df.auc %>% ggplot(aes(x=Model, y = AUC)) + geom_boxplot() + facet_wrap(~Sample)
 
-rf.auc.box <- long.auc.df %>% ggplot(aes(x = Sample, y = RF)) +
-  geom_boxplot() +
-  labs(title = "Random Forest AUC Boxplots",
-       y = "AUC") +
-  theme_bw()
-
-
-grid.arrange(elnet.auc.box, lasso.auc.box,
-             ridge.auc.box, rf.auc.box,
-             nrow=2, ncol=2)
 
 ###############################################
 ### Fit the 4 models on the entire data set ###
@@ -357,15 +308,15 @@ full.times <- c(rep(0,4))
 
 elnet.start.full <- proc.time()
 elnet.full.cv    <- cv.glmnet(data.X, data.Y, 
-                              family = "binomial",
-                              alpha = elnet.alpha,
+                              parallel     = TRUE,
+                              family       = "binomial",
+                              alpha        = elnet.alpha,
                               type.measure = "auc")
 
 elnet.full.lambda <- elnet.full.cv$lambda.min
 elnet.model <- glmnet(data.X, data.Y, 
                       family="binomial",
-                      alpha = elnet.alpha,
-                      lambda = elnet.full.lambda)
+                      alpha = elnet.alpha)
 elnet.end.full <- proc.time()
 elnet.full.time <- elnet.end.full[3] - elnet.start.full[3]
 full.times[1] <- elnet.full.time
@@ -376,14 +327,14 @@ full.times[1] <- elnet.full.time
 
 lasso.start.full  <- proc.time()
 lasso.full.cv     <- cv.glmnet(data.X, data.Y, 
-                               family = "binomial",
-                               alpha = lasso.alpha,
+                               parallel     = TRUE,
+                               family       = "binomial",
+                               alpha        = lasso.alpha,
                                type.measure = "auc")
 lasso.full.lambda <- lasso.full.cv$lambda.min
 lasso.model       <- glmnet(data.X, data.Y, 
-                            family="binomial",
-                            alpha = lasso.alpha,
-                            lambda = lasso.full.lambda)
+                            family  = "binomial",
+                            alpha   = lasso.alpha)
 lasso.end.full    <- proc.time()
 lasso.full.time   <- lasso.end.full[3] - lasso.start.full[3]
 full.times[2]     <- lasso.full.time
@@ -392,14 +343,14 @@ full.times[2]     <- lasso.full.time
 
 ridge.start.full  <- proc.time()
 ridge.full.cv     <- cv.glmnet(data.X, data.Y, 
-                               family = "binomial",
-                               alpha = ridge.alpha,
+                               parallel     = TRUE,
+                               family       = "binomial",
+                               alpha        = ridge.alpha,
                                type.measure = "auc")
 ridge.full.lambda <- ridge.full.cv$lambda.min
 ridge.model       <- glmnet(data.X, data.Y, 
                             family="binomial",
-                            alpha = ridge.alpha,
-                            lambda = ridge.full.lambda)
+                            alpha = ridge.alpha)
 ridge.end.full    <- proc.time()
 ridge.full.time   <- ridge.end.full[3] - ridge.start.full[3]
 full.times[3]     <- ridge.full.time
@@ -422,9 +373,9 @@ auc.times.df
 
 s = apply(data.X, 2, sd) # get the standard deviation of the variables
 
-elnet.full.beta <- as.vector(elnet.full.cv$glmnet.fit$beta[,which.max(elnet.full.cv$cvm)])
-lasso.full.beta <- as.vector(lasso.full.cv$glmnet.fit$beta[,which.max(lasso.full.cv$cvm)])
-ridge.full.beta <- as.vector(ridge.full.cv$glmnet.fit$beta[,which.max(ridge.full.cv$cvm)])
+elnet.full.beta <- as.vector(elnet.model$beta[,which.max(elnet.full.cv$cvm)])
+lasso.full.beta <- as.vector(lasso.model$beta[,which.max(lasso.full.cv$cvm)])
+ridge.full.beta <- as.vector(ridge.model$beta[,which.max(ridge.full.cv$cvm)])
 
 elnet.coefs       <- elnet.full.beta*s  # multiply coefficients by sd(Variable) to standardize
 lasso.coefs       <- lasso.full.beta*s
@@ -449,27 +400,35 @@ variable.importance   <- variable.importance[order(variable.importance$ElNet, de
 # force ggplot to respect the order the data is sorted in. 
 variable.importance$Number <- factor(variable.importance$Number, levels=variable.importance$Number) 
 
+variable.importance_ELN   <- variable.importance[order(abs(variable.importance$ElNet), decreasing = TRUE),]
+variable.importance_ELN
+
+variable.importance_L   <- variable.importance[order(abs(variable.importance$Lasso), decreasing = TRUE),]
+variable.importance_L
+
+variable.importance_R   <- variable.importance[order(abs(variable.importance$Ridge), decreasing = TRUE),]
+variable.importance_R
+
+variable.importance_RF   <- variable.importance[order(abs(variable.importance$MeanDecreaseGini), decreasing = TRUE),]
+variable.importance_RF
 
 # create the plots so we can feed them to grid arrange
 elnetPlot = variable.importance %>% ggplot(aes(x = Number, y = ElNet)) +
-  geom_col() +
-  labs(title = "Standardized Elastic Net Coefficients", x = "Variable", y = "Coefficient") +
-  theme_bw() 
+  geom_bar(stat = "identity", fill="white", colour="#FF0000") +
+  labs(title = "Standardized Elastic Net Coefficients", x = "Variable", y = "Coefficient") + theme(axis.title.x=element_blank(), axis.text.x=element_blank(),axis.ticks.x=element_blank())
 
-lassoPlot = variable.importance %>% ggplot(aes(x = Number, y = Lasso)) +
-  geom_col() +
-  labs(title = "Standardized Lasso Coefficients", x = "Variable", y = "Coefficient") +
-  theme_bw()
+lassoPlot = variable.importance %>% ggplot(aes(x = Number, y = Lasso))  +
+  geom_bar(stat = "identity", fill="white", colour="#70AD47") +
+  labs(title = "Standardized Lasso Coefficients", x = "Variable", y = "Coefficient") + theme(axis.title.x=element_blank(), axis.text.x=element_blank(),axis.ticks.x=element_blank())
 
 ridgePlot = variable.importance %>% ggplot(aes(x = Number, y = Ridge)) +
-  geom_col() +
-  labs(title = "Standardized Ridge Coefficients", x = "Variable", y = "Coefficient") +
-  theme_bw()
+  geom_bar(stat = "identity", fill="white", colour="#CC04C2") +
+  labs(title = "Standardized Ridge Coefficients", x = "Variable", y = "Coefficient") + theme(axis.title.x=element_blank(), axis.text.x=element_blank(),axis.ticks.x=element_blank())
 
-rfPlot = variable.importance %>% ggplot(aes(x = Number, y = IncNodePurity)) +
-  geom_col() +
-  labs(title = "Random Forrest Variable Importance", x = "Variable", y = "Coefficient") +
-  theme_bw() 
+rfPlot = variable.importance %>% ggplot(aes(x = Number, y = MeanDecreaseGini)) +
+  geom_bar(stat = "identity", fill="white", colour="#02C9CE") +
+  labs(title = "Random Forrest Variable Importance", x = "Variable", y = "Importance") + theme(axis.title.x=element_blank(), axis.text.x=element_blank(),axis.ticks.x=element_blank() )
+
  
 
 # arrange the plots in a single image
