@@ -2,10 +2,10 @@ rm(list = ls())
 cat("\014")
 
 set.seed(125)
-setwd("C:/Users/eriks/OneDrive - Smart City Real Estate/Personal/Baruch/S5/STA 9891/Project")
+setwd("put-your-path-here")
 
-library(doMC)
-library(parallel)
+library(doMC) # to install, use: install.packages("doMC", repos="http://R-Forge.R-project.org")
+library(parallel) # for parallel computing
 library(glmnet)
 library(tidyverse)
 library(randomForest)
@@ -32,9 +32,6 @@ data.Y <- as.factor(data$CARAVAN)
 # put it all together for use with Random Forest. 
 data.full <- as.data.frame(data.X)
 data.full$CARAVAN <- data.Y
-
-class(data.full$CARAVAN)
-levels(data.full$CARAVAN)
 
 n = nrow(data)
 p = dim(data.X)[2]
