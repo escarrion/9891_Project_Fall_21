@@ -284,7 +284,7 @@ test.auc.df = data.frame(Sample = sample.test,
 long.df.auc = rbind(train.auc.df, test.auc.df)
 
 # Create the boxplot
-long.df.auc %>% ggplot(aes(x=Model, y = AUC)) + geom_boxplot() + facet_wrap(~Sample)
+long.df.auc %>% ggplot(aes(x=Model, y = AUC, color = Model)) + geom_boxplot() + facet_wrap(~Sample)
 
 
 ###############################################
