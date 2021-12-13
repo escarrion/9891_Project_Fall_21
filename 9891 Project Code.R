@@ -400,27 +400,35 @@ variable.importance   <- variable.importance[order(variable.importance$ElNet, de
 # force ggplot to respect the order the data is sorted in. 
 variable.importance$Number <- factor(variable.importance$Number, levels=variable.importance$Number) 
 
+variable.importance_ELN   <- variable.importance[order(abs(variable.importance$ElNet), decreasing = TRUE),]
+variable.importance_ELN
+
+variable.importance_L   <- variable.importance[order(abs(variable.importance$Lasso), decreasing = TRUE),]
+variable.importance_L
+
+variable.importance_R   <- variable.importance[order(abs(variable.importance$Ridge), decreasing = TRUE),]
+variable.importance_R
+
+variable.importance_RF   <- variable.importance[order(abs(variable.importance$MeanDecreaseGini), decreasing = TRUE),]
+variable.importance_RF
 
 # create the plots so we can feed them to grid arrange
 elnetPlot = variable.importance %>% ggplot(aes(x = Number, y = ElNet)) +
-  geom_col() +
-  labs(title = "Standardized Elastic Net Coefficients", x = "Variable", y = "Coefficient") +
-  theme_bw() 
+  geom_bar(stat = "identity", fill="white", colour="#FF0000") +
+  labs(title = "Standardized Elastic Net Coefficients", x = "Variable", y = "Coefficient") + theme(axis.title.x=element_blank(), axis.text.x=element_blank(),axis.ticks.x=element_blank())
 
-lassoPlot = variable.importance %>% ggplot(aes(x = Number, y = Lasso)) +
-  geom_col() +
-  labs(title = "Standardized Lasso Coefficients", x = "Variable", y = "Coefficient") +
-  theme_bw()
+lassoPlot = variable.importance %>% ggplot(aes(x = Number, y = Lasso))  +
+  geom_bar(stat = "identity", fill="white", colour="#70AD47") +
+  labs(title = "Standardized Lasso Coefficients", x = "Variable", y = "Coefficient") + theme(axis.title.x=element_blank(), axis.text.x=element_blank(),axis.ticks.x=element_blank())
 
 ridgePlot = variable.importance %>% ggplot(aes(x = Number, y = Ridge)) +
-  geom_col() +
-  labs(title = "Standardized Ridge Coefficients", x = "Variable", y = "Coefficient") +
-  theme_bw()
+  geom_bar(stat = "identity", fill="white", colour="#CC04C2") +
+  labs(title = "Standardized Ridge Coefficients", x = "Variable", y = "Coefficient") + theme(axis.title.x=element_blank(), axis.text.x=element_blank(),axis.ticks.x=element_blank())
 
 rfPlot = variable.importance %>% ggplot(aes(x = Number, y = MeanDecreaseGini)) +
-  geom_col() +
-  labs(title = "Random Forrest Variable Importance", x = "Variable", y = "Coefficient") +
-  theme_bw() 
+  geom_bar(stat = "identity", fill="white", colour="#02C9CE") +
+  labs(title = "Random Forrest Variable Importance", x = "Variable", y = "Importance") + theme(axis.title.x=element_blank(), axis.text.x=element_blank(),axis.ticks.x=element_blank() )
+
  
 
 # arrange the plots in a single image
