@@ -262,51 +262,30 @@ total.sim.time
 ###             AUC Box-Plots              ###
 ###############################################
 
-sample.train <- rep("Train", 50)
-sample.test  <- rep("Test", 50)
+sample.train <- rep("Train", 200)
+sample.test  <- rep("Test", 200)
+elnet.label  <- rep("Elastic Net", 50)
+lasso.label  <- rep("Lasso", 50)
+ridge.label  <- rep("Ridge", 50)
+rf.label     <- rep("Random Forest", 50)
 
-# Convert to Long Format for ease of use with ggplot
-auc.train.df <- data.frame(Sample = sample.train,
-                           ElNet = auc.df$ElNet.train,
-                           Lasso = auc.df$Lasso.train,
-                           Ridge = auc.df$Ridge.train, 
-                           RF    = auc.df$RF.train)
-auc.test.df <- data.frame(Sample = sample.test, 
-                          ElNet  = auc.df$ElNet.test,
-                          Lasso  = auc.df$Lasso.test,
-                          Ridge  = auc.df$Ridge.test,
-                          RF     = auc.df$RF.test)
-long.auc.df <- rbind(auc.train.df, auc.test.df)
+method.labels = c(elnet.label, lasso.label, ridge.label, rf.label)
 
-##### Create The Box Plots #####
-elnet.auc.box <- long.auc.df %>% ggplot(aes(x = Sample, y = ElNet)) +
-  geom_boxplot() +
-  labs(title = "Elastic Net AUC Boxplots",
-       y = "AUC") +
-  theme_bw()
+train_auc = c(auc.df$ElNet.train, auc.df$Lasso.train, auc.df$Ridge.train, auc.df$RF.train)
+test_auc  = c(auc.df$ElNet.test, auc.df$Lasso.test,auc.df$Ridge.test,auc.df$RF.test)
+total_auc = c(train_auc, test_auc)
 
-lasso.auc.box <- long.auc.df %>% ggplot(aes(x = Sample, y = Lasso)) +
-  geom_boxplot() +
-  labs(title = "Lasso AUC Boxplots",
-       y = "AUC") +
-  theme_bw()
+train.auc.df = data.frame(Sample = sample.train, 
+                          Model = method.labels, 
+                          AUC = train_auc)
+test.auc.df = data.frame(Sample = sample.test, 
+                         Model = method.labels, 
+                         AUC = test_auc)
+long.df.auc = rbind(train.auc.df, test.auc.df)
 
-ridge.auc.box <- long.auc.df %>% ggplot(aes(x = Sample, y = Ridge)) +
-  geom_boxplot() +
-  labs(title = "Ridge AUC Boxplots",
-       y = "AUC") +
-  theme_bw()
+# Create the boxplot
+long.df.auc %>% ggplot(aes(x=Model, y = AUC)) + geom_boxplot() + facet_wrap(~Sample)
 
-rf.auc.box <- long.auc.df %>% ggplot(aes(x = Sample, y = RF)) +
-  geom_boxplot() +
-  labs(title = "Random Forest AUC Boxplots",
-       y = "AUC") +
-  theme_bw()
-
-
-grid.arrange(elnet.auc.box, lasso.auc.box,
-             ridge.auc.box, rf.auc.box,
-             nrow=2, ncol=2)
 
 ###############################################
 ### Fit the 4 models on the entire data set ###
